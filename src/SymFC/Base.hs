@@ -3,16 +3,19 @@
 {-# LANGUAGE MagicHash #-}
 {-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE UnboxedTuples #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
-module Pantomime.Base
-  ( axioms
+module SymFC.Base
+  ( embeddings
   ) where
 
 import Control.Exception.Base qualified as GHC (patError, throw)
 import Data.Constraint.Unsafe (unsafeSNat)
+import Data.Functor.Identity (Identity (..))
 import Data.List qualified as GHC (zip)
 import GHC.Base
   ( TYPE
+  , Void
   , Int#
   , Int8#
   , Int16#
@@ -25,11 +28,13 @@ import GHC.Base
   , Word64#
   , Addr#
   , RuntimeRep (..)
-  , Int (..)
+  , State#
+  , RealWorld
+  , coerce
   )
 import GHC.Base qualified as GHC
-import GHC.Exts (IsList (..))
-import GHC.Num (Integer(..), Natural (..))
+import GHC.Int (Int (..), Int8 (..), Int16 (..), Int32 (..), Int64 (..))
+import GHC.Num (Integer (..), Natural (..))
 import GHC.Num qualified as GHC
   ( integerFromBigNat#
   , integerFromBigNatNeg#
@@ -38,6 +43,7 @@ import GHC.Num qualified as GHC
   , integerSub
   , integerToInt#
   , integerToNatural
+  , integerToNaturalThrow
   , integerToWord#
   , naturalAdd
   , naturalSubThrow
@@ -58,16 +64,26 @@ import GHC.Num.BigNat qualified as GHC
   )
 import GHC.Prim qualified as GHC
 import GHC.Prim.Exception qualified as GHC
+import GHC.Prim.Panic qualified as GHC
 import GHC.TypeLits (KnownNat, SNat, type (+))
 import GHC.TypeNats qualified as GHC (withSomeSNat)
-import Pantomime (PluginAxioms (..))
-import Pantomime.BuiltIn qualified as Pantomime
+import GHC.Word (Word (..), Word8 (..), Word16 (..), Word32 (..), Word64 (..))
+import SymFC (Embeddings (..))
+import SymFC.BuiltIn qualified as SymFC
+import SymFC.BuiltIn
+  ( Embeddable
+  , Embedding (..)
+  , BitVec
+  , PlatformWordSize
+  , Symbolic (..)
+  , embedding
+  )
 import Prelude hiding (undefined, map, zip, fromInteger, toInteger)
 import Unsafe.Coerce (unsafeCoerce)
 
-axioms :: PluginAxioms
-axioms = PluginAxioms
-  { typeAxioms = fromList
+embeddings :: Embeddings
+embeddings = Embeddings
+  { typeEmbeddings =
     [ (''Int#, ''BitVecPW)
     , (''Int8#, ''BitVec8)
     , (''Int16#, ''BitVec16)
@@ -79,44 +95,44 @@ axioms = PluginAxioms
     , (''Word32#, ''BitVec32)
     , (''Word64#, ''BitVec64)
     ]
-  , termAxioms =
-    -- Pantomime embed operations.
+  , termEmbeddings =
+    -- SymFC embed operations.
     ------------------------------
-    [ ('Pantomime.toInt#, 'fromBV)
-    , ('Pantomime.toInt8#, 'fromBV)
-    , ('Pantomime.toInt16#, 'fromBV)
-    , ('Pantomime.toInt32#, 'fromBV)
-    , ('Pantomime.toInt64#, 'fromBV)
-    , ('Pantomime.toWord#, 'fromBV)
-    , ('Pantomime.toWord8#, 'fromBV)
-    , ('Pantomime.toWord16#, 'fromBV)
-    , ('Pantomime.toWord32#, 'fromBV)
-    , ('Pantomime.toWord64#, 'fromBV)
-    , ('Pantomime.fromInt#, 'toBV)
-    , ('Pantomime.fromInt8#, 'toBV)
-    , ('Pantomime.fromInt16#, 'toBV)
-    , ('Pantomime.fromInt32#, 'toBV)
-    , ('Pantomime.fromInt64#, 'toBV)
-    , ('Pantomime.fromWord#, 'toBV)
-    , ('Pantomime.fromWord8#, 'toBV)
-    , ('Pantomime.fromWord16#, 'toBV)
-    , ('Pantomime.fromWord32#, 'toBV)
-    , ('Pantomime.fromWord64#, 'toBV)
+    [ ('SymFC.toInt#, 'fromBV)
+    , ('SymFC.toInt8#, 'fromBV)
+    , ('SymFC.toInt16#, 'fromBV)
+    , ('SymFC.toInt32#, 'fromBV)
+    , ('SymFC.toInt64#, 'fromBV)
+    , ('SymFC.toWord#, 'fromBV)
+    , ('SymFC.toWord8#, 'fromBV)
+    , ('SymFC.toWord16#, 'fromBV)
+    , ('SymFC.toWord32#, 'fromBV)
+    , ('SymFC.toWord64#, 'fromBV)
+    , ('SymFC.fromInt#, 'toBV)
+    , ('SymFC.fromInt8#, 'toBV)
+    , ('SymFC.fromInt16#, 'toBV)
+    , ('SymFC.fromInt32#, 'toBV)
+    , ('SymFC.fromInt64#, 'toBV)
+    , ('SymFC.fromWord#, 'toBV)
+    , ('SymFC.fromWord8#, 'toBV)
+    , ('SymFC.fromWord16#, 'toBV)
+    , ('SymFC.fromWord32#, 'toBV)
+    , ('SymFC.fromWord64#, 'toBV)
 
-    -- Integer to pantomime primitive conversions.
+    -- Integer to symbolic primitive conversions.
     ----------------------------------------------
-    , ('Pantomime.fromInteger, 'fromInteger)
-    , ('Pantomime.toInteger, 'toInteger)
+    , ('SymFC.fromInteger, 'fromInteger)
+    , ('SymFC.toInteger, 'toInteger)
 
     -- System FC primitive operations.
     ----------------------------------
-    , ('GHC.tagToEnum#, 'tagToEnum)
+    , ('SymFC.tagToEnum#, 'tagToEnum)
     -- TODO: While these might be deprecated for use, they are in fact required
     -- in this context... Not sure what to do if these are unexposed (but still
     -- used internally) in the future.
     , ('GHC.dataToTagSmall#, 'dataToTag)
     , ('GHC.dataToTagLarge#, 'dataToTag)
-    , ('GHC.raise#, 'Pantomime.raise)
+    , ('GHC.raise#, 'SymFC.raise)
 
     -- Int# primitive operations.
     -----------------------------
@@ -368,6 +384,7 @@ axioms = PluginAxioms
     , ('GHC.integerToWord#, 'integerToWord#)
     , ('GHC.integerFromNatural, 'integerFromNatural)
     , ('GHC.integerToNatural, 'integerToNatural)
+    , ('GHC.integerToNaturalThrow, 'integerToNaturalThrow)
     , ('GHC.integerToInt#, 'integerToInt#)
     , ('GHC.integerSub, 'integerSub)
     , ('GHC.naturalAdd, 'naturalAdd)
@@ -375,68 +392,70 @@ axioms = PluginAxioms
     , ('GHC.noinline, 'noinline)
     , ('GHC.undefined, 'undefined)
     , ('GHC.throw, 'throw)
-    , ('GHC.patError, 'patError')
+    , ('GHC.patError, 'patError)
+    , ('GHC.absentError, 'absentError)
     , ('GHC.withSomeSNat, 'withSomeSNat)
     , ('GHC.map, 'map)
     , ('GHC.zip, 'zip)
+    , ('GHC.runRW#, 'runRW#)
     ]
   }
 
-type BitVecPW = Pantomime.BitVec Pantomime.PlatformWordSize
+type BitVecPW = BitVec PlatformWordSize
 
-type BitVec8 = Pantomime.BitVec 8
+type BitVec8 = BitVec 8
 
-type BitVec16 = Pantomime.BitVec 16
+type BitVec16 = BitVec 16
 
-type BitVec32 = Pantomime.BitVec 32
+type BitVec32 = BitVec 32
 
-type BitVec64 = Pantomime.BitVec 64
+type BitVec64 = BitVec 64
 
 fromBV
   :: forall r n (a :: TYPE r)
-   . Pantomime.Embeddable (Pantomime.BitVec n) a
-  => Pantomime.BitVec n
+   . Embeddable a (BitVec n)
+  => BitVec n
   -> a
-fromBV = Pantomime.embed
+fromBV | Embedding <- embedding @a = coerce
 
 toBV
   :: forall r n (a :: TYPE r)
-   . Pantomime.Embeddable (Pantomime.BitVec n) a
+   . Embeddable a (BitVec n)
   => a
-  -> Pantomime.BitVec n
-toBV = Pantomime.project
+  -> BitVec n
+toBV | Embedding <- embedding @a = coerce
 
-bool2I# :: Pantomime.Bool -> Int#
-bool2I# scrut = Pantomime.iteIP scrut 1# 0#
+bool2I# :: SymFC.Bool -> Int#
+bool2I# scrut = SymFC.iteIP scrut 1# 0#
 
-tagToEnum :: Int# -> a
-tagToEnum i = Pantomime.tagToEnum $ Pantomime.fromInt# i
+tagToEnum :: SymFC.EnumCon a => Int# -> a
+tagToEnum i = SymFC.tagToEnum $ SymFC.fromInt# i
 
 dataToTag :: forall l (a :: TYPE (BoxedRep l)). a -> Int#
 -- SAFETY: We need some 'unsafeCoerce' magic because we cannot bind a type
 -- without a fixed runtime representation. The symbolic evaluator doesn't care
 -- at all about 'RuntimeRep' and so we can just fake it to be 'Lifted'.
 -- Perhaps once embed becomes more like coerce that we can do the following:
--- dataToTag = Pantomime.embed Pantomime.dataToTag
+-- dataToTag = SymFC.embed SymFC.dataToTag
 dataToTag = unsafeCoerce @(forall b. b -> Int#) @(forall b. b -> Int#) go
   where
     go :: forall b. b -> Int#
-    go x = Pantomime.toInt# $ Pantomime.dataToTag x
+    go x = SymFC.toInt# $ SymFC.dataToTag x
 
 int2Word# :: Int# -> Word#
-int2Word# x = Pantomime.toWord# $ Pantomime.fromInt# x
+int2Word# x = SymFC.toWord# $ SymFC.fromInt# x
 
 intToInt8# :: Int# -> Int8#
-intToInt8# x = Pantomime.toInt8# $ Pantomime.bvselect @0 $ Pantomime.fromInt# x
+intToInt8# x = SymFC.toInt8# $ SymFC.bvselect @0 $ SymFC.fromInt# x
 
 intToInt16# :: Int# -> Int16#
-intToInt16# x = Pantomime.toInt16# $ Pantomime.bvselect @0 $ Pantomime.fromInt# x
+intToInt16# x = SymFC.toInt16# $ SymFC.bvselect @0 $ SymFC.fromInt# x
 
 intToInt32# :: Int# -> Int32#
-intToInt32# x = Pantomime.toInt32# $ Pantomime.bvselect @0 $ Pantomime.fromInt# x
+intToInt32# x = SymFC.toInt32# $ SymFC.bvselect @0 $ SymFC.fromInt# x
 
 intToInt64# :: Int# -> Int64#
-intToInt64# x = Pantomime.toInt64# $ Pantomime.bvselect @0 $ Pantomime.fromInt# x
+intToInt64# x = SymFC.toInt64# $ SymFC.bvselect @0 $ SymFC.fromInt# x
 
 binaryInt#
   :: (BitVecPW -> BitVecPW -> BitVecPW)
@@ -444,9 +463,9 @@ binaryInt#
   -> Int#
   -> Int#
 binaryInt# f lhs rhs = do
-  let lhs' = Pantomime.fromInt# lhs
-  let rhs' = Pantomime.fromInt# rhs
-  Pantomime.toInt# $ f lhs' rhs'
+  let lhs' = SymFC.fromInt# lhs
+  let rhs' = SymFC.fromInt# rhs
+  SymFC.toInt# $ f lhs' rhs'
 
 (+#) :: Int# -> Int# -> Int#
 (+#) = binaryInt# (+)
@@ -458,85 +477,85 @@ binaryInt# f lhs rhs = do
 (*#) = binaryInt# (*)
 
 binaryIntC#
-  :: (forall n. KnownNat n => Pantomime.BitVec n -> Pantomime.BitVec n -> Pantomime.BitVec n)
+  :: (forall n. KnownNat n => BitVec n -> BitVec n -> BitVec n)
   -> Int#
   -> Int#
   -> (# Int#, Int# #)
 binaryIntC# f lhs rhs = do
   let project' x
-        = Pantomime.bvzext @_ @(Pantomime.PlatformWordSize + 1)
-        $ Pantomime.fromInt# x
+        = SymFC.bvzext @_ @(PlatformWordSize + 1)
+        $ SymFC.fromInt# x
   let lhs' = project' lhs
   let rhs' = project' rhs
 
   let result = f lhs' rhs'
-  let add = Pantomime.bvselect @0 result
-  let carry = Pantomime.bvselect @Pantomime.PlatformWordSize @1 result
-  let carry' = Pantomime.bvzext carry
-  (# Pantomime.toInt# add, Pantomime.toInt# carry' #)
+  let add = SymFC.bvselect @0 result
+  let carry = SymFC.bvselect @PlatformWordSize @1 result
+  let carry' = SymFC.bvzext carry
+  (# SymFC.toInt# add, SymFC.toInt# carry' #)
 
 addIntC# :: Int# -> Int# -> (# Int#, Int# #)
-addIntC# = binaryIntC# Pantomime.bvadd
+addIntC# = binaryIntC# SymFC.bvadd
 
 subIntC# :: Int# -> Int# -> (# Int#, Int# #)
-subIntC# = binaryIntC# \lhs rhs -> Pantomime.bvadd lhs (Pantomime.bvneg rhs)
+subIntC# = binaryIntC# \lhs rhs -> SymFC.bvadd lhs (SymFC.bvneg rhs)
 
 andI# :: Int# -> Int# -> Int#
-andI# = binaryInt# Pantomime.bvand
+andI# = binaryInt# SymFC.bvand
 
 orI# :: Int# -> Int# -> Int#
-orI# = binaryInt# Pantomime.bvor
+orI# = binaryInt# SymFC.bvor
 
 xorI# :: Int# -> Int# -> Int#
-xorI# = binaryInt# Pantomime.bvxor
+xorI# = binaryInt# SymFC.bvxor
 
 unaryInt#
   :: (BitVecPW -> BitVecPW)
   -> Int#
   -> Int#
 unaryInt# f x = do
-  let x' = Pantomime.fromInt# x
-  Pantomime.toInt# $ f x'
+  let x' = SymFC.fromInt# x
+  SymFC.toInt# $ f x'
 
 notI# :: Int# -> Int#
-notI# = unaryInt# Pantomime.bvnot
+notI# = unaryInt# SymFC.bvnot
 
 negateInt# :: Int# -> Int#
-negateInt# = unaryInt# Pantomime.bvneg
+negateInt# = unaryInt# SymFC.bvneg
 
 compareInt#
-  :: (BitVecPW -> BitVecPW -> Pantomime.Bool)
+  :: (BitVecPW -> BitVecPW -> SymFC.Bool)
   -> Int#
   -> Int#
   -> Int#
 compareInt# f lhs rhs = do
-  let lhs' = Pantomime.fromInt# lhs
-  let rhs' = Pantomime.fromInt# rhs
+  let lhs' = SymFC.fromInt# lhs
+  let rhs' = SymFC.fromInt# rhs
   bool2I# $ f lhs' rhs'
 
 (==#) :: Int# -> Int# -> Int#
-(==#) = compareInt# Pantomime.bveq
+(==#) = compareInt# SymFC.bveq
 
 (/=#) :: Int# -> Int# -> Int#
-(/=#) = compareInt# Pantomime.bvneq
+(/=#) = compareInt# SymFC.bvneq
 
 (>=#) :: Int# -> Int# -> Int#
-(>=#) = compareInt# $ flip Pantomime.bvsle
+(>=#) = compareInt# $ flip SymFC.bvsle
 
 (>#) :: Int# -> Int# -> Int#
-(>#) = compareInt# $ flip Pantomime.bvslt
+(>#) = compareInt# $ flip SymFC.bvslt
 
 (<=#) :: Int# -> Int# -> Int#
-(<=#) = compareInt# Pantomime.bvsle
+(<=#) = compareInt# SymFC.bvsle
 
 (<#) :: Int# -> Int# -> Int#
-(<#) = compareInt# Pantomime.bvslt
+(<#) = compareInt# SymFC.bvslt
 
 int8ToInt# :: Int8# -> Int#
-int8ToInt# x = Pantomime.toInt# $ Pantomime.bvsext $ Pantomime.fromInt8# x
+int8ToInt# x = SymFC.toInt# $ SymFC.bvsext $ SymFC.fromInt8# x
 
 int8ToWord8# :: Int8# -> Word8#
-int8ToWord8# x = Pantomime.toWord8# $ Pantomime.fromInt8# x
+int8ToWord8# x = SymFC.toWord8# $ SymFC.fromInt8# x
 
 binaryInt8#
   :: (BitVec8 -> BitVec8 -> BitVec8)
@@ -544,9 +563,9 @@ binaryInt8#
   -> Int8#
   -> Int8#
 binaryInt8# f lhs rhs = do
-  let lhs' = Pantomime.fromInt8# lhs
-  let rhs' = Pantomime.fromInt8# rhs
-  Pantomime.toInt8# $ f lhs' rhs'
+  let lhs' = SymFC.fromInt8# lhs
+  let rhs' = SymFC.fromInt8# rhs
+  SymFC.toInt8# $ f lhs' rhs'
 
 plusInt8# :: Int8# -> Int8# -> Int8#
 plusInt8# = binaryInt8# (+)
@@ -562,45 +581,45 @@ unaryInt8#
   -> Int8#
   -> Int8#
 unaryInt8# f x = do
-  let x' = Pantomime.fromInt8# x
-  Pantomime.toInt8# $ f x'
+  let x' = SymFC.fromInt8# x
+  SymFC.toInt8# $ f x'
 
 negateInt8# :: Int8# -> Int8#
 negateInt8# = unaryInt8# negate
 
 compareInt8#
-  :: (BitVec8 -> BitVec8 -> Pantomime.Bool)
+  :: (BitVec8 -> BitVec8 -> SymFC.Bool)
   -> Int8#
   -> Int8#
   -> Int#
 compareInt8# f lhs rhs = do
-  let lhs' = Pantomime.fromInt8# lhs
-  let rhs' = Pantomime.fromInt8# rhs
+  let lhs' = SymFC.fromInt8# lhs
+  let rhs' = SymFC.fromInt8# rhs
   bool2I# $ f lhs' rhs'
 
 eqInt8# :: Int8# -> Int8# -> Int#
-eqInt8# = compareInt8# Pantomime.bveq
+eqInt8# = compareInt8# SymFC.bveq
 
 neInt8# :: Int8# -> Int8# -> Int#
-neInt8# = compareInt8# Pantomime.bvneq
+neInt8# = compareInt8# SymFC.bvneq
 
 geInt8# :: Int8# -> Int8# -> Int#
-geInt8# = compareInt8# $ flip Pantomime.bvsle
+geInt8# = compareInt8# $ flip SymFC.bvsle
 
 gtInt8# :: Int8# -> Int8# -> Int#
-gtInt8# = compareInt8# $ flip Pantomime.bvslt
+gtInt8# = compareInt8# $ flip SymFC.bvslt
 
 leInt8# :: Int8# -> Int8# -> Int#
-leInt8# = compareInt8# Pantomime.bvsle
+leInt8# = compareInt8# SymFC.bvsle
 
 ltInt8# :: Int8# -> Int8# -> Int#
-ltInt8# = compareInt8# Pantomime.bvslt
+ltInt8# = compareInt8# SymFC.bvslt
 
 int16ToInt# :: Int16# -> Int#
-int16ToInt# x = Pantomime.toInt# $ Pantomime.bvsext $ Pantomime.fromInt16# x
+int16ToInt# x = SymFC.toInt# $ SymFC.bvsext $ SymFC.fromInt16# x
 
 int16ToWord16# :: Int16# -> Word16#
-int16ToWord16# x = Pantomime.toWord16# $ Pantomime.fromInt16# x
+int16ToWord16# x = SymFC.toWord16# $ SymFC.fromInt16# x
 
 binaryInt16#
   :: (BitVec16 -> BitVec16 -> BitVec16)
@@ -608,9 +627,9 @@ binaryInt16#
   -> Int16#
   -> Int16#
 binaryInt16# f lhs rhs = do
-  let lhs' = Pantomime.fromInt16# lhs
-  let rhs' = Pantomime.fromInt16# rhs
-  Pantomime.toInt16# $ f lhs' rhs'
+  let lhs' = SymFC.fromInt16# lhs
+  let rhs' = SymFC.fromInt16# rhs
+  SymFC.toInt16# $ f lhs' rhs'
 
 plusInt16# :: Int16# -> Int16# -> Int16#
 plusInt16# = binaryInt16# (+)
@@ -626,45 +645,45 @@ unaryInt16#
   -> Int16#
   -> Int16#
 unaryInt16# f x = do
-  let x' = Pantomime.fromInt16# x
-  Pantomime.toInt16# $ f x'
+  let x' = SymFC.fromInt16# x
+  SymFC.toInt16# $ f x'
 
 negateInt16# :: Int16# -> Int16#
 negateInt16# = unaryInt16# negate
 
 compareInt16#
-  :: (BitVec16 -> BitVec16 -> Pantomime.Bool)
+  :: (BitVec16 -> BitVec16 -> SymFC.Bool)
   -> Int16#
   -> Int16#
   -> Int#
 compareInt16# f lhs rhs = do
-  let lhs' = Pantomime.fromInt16# lhs
-  let rhs' = Pantomime.fromInt16# rhs
+  let lhs' = SymFC.fromInt16# lhs
+  let rhs' = SymFC.fromInt16# rhs
   bool2I# $ f lhs' rhs'
 
 eqInt16# :: Int16# -> Int16# -> Int#
-eqInt16# = compareInt16# Pantomime.bveq
+eqInt16# = compareInt16# SymFC.bveq
 
 neInt16# :: Int16# -> Int16# -> Int#
-neInt16# = compareInt16# Pantomime.bvneq
+neInt16# = compareInt16# SymFC.bvneq
 
 geInt16# :: Int16# -> Int16# -> Int#
-geInt16# = compareInt16# $ flip Pantomime.bvsle
+geInt16# = compareInt16# $ flip SymFC.bvsle
 
 gtInt16# :: Int16# -> Int16# -> Int#
-gtInt16# = compareInt16# $ flip Pantomime.bvslt
+gtInt16# = compareInt16# $ flip SymFC.bvslt
 
 leInt16# :: Int16# -> Int16# -> Int#
-leInt16# = compareInt16# Pantomime.bvsle
+leInt16# = compareInt16# SymFC.bvsle
 
 ltInt16# :: Int16# -> Int16# -> Int#
-ltInt16# = compareInt16# Pantomime.bvslt
+ltInt16# = compareInt16# SymFC.bvslt
 
 int32ToInt# :: Int32# -> Int#
-int32ToInt# x = Pantomime.toInt# $ Pantomime.bvsext $ Pantomime.fromInt32# x
+int32ToInt# x = SymFC.toInt# $ SymFC.bvsext $ SymFC.fromInt32# x
 
 int32ToWord32# :: Int32# -> Word32#
-int32ToWord32# x = Pantomime.toWord32# $ Pantomime.fromInt32# x
+int32ToWord32# x = SymFC.toWord32# $ SymFC.fromInt32# x
 
 binaryInt32#
   :: (BitVec32 -> BitVec32 -> BitVec32)
@@ -672,9 +691,9 @@ binaryInt32#
   -> Int32#
   -> Int32#
 binaryInt32# f lhs rhs = do
-  let lhs' = Pantomime.fromInt32# lhs
-  let rhs' = Pantomime.fromInt32# rhs
-  Pantomime.toInt32# $ f lhs' rhs'
+  let lhs' = SymFC.fromInt32# lhs
+  let rhs' = SymFC.fromInt32# rhs
+  SymFC.toInt32# $ f lhs' rhs'
 
 plusInt32# :: Int32# -> Int32# -> Int32#
 plusInt32# = binaryInt32# (+)
@@ -690,55 +709,55 @@ unaryInt32#
   -> Int32#
   -> Int32#
 unaryInt32# f x = do
-  let x' = Pantomime.fromInt32# x
-  Pantomime.toInt32# $ f x'
+  let x' = SymFC.fromInt32# x
+  SymFC.toInt32# $ f x'
 
 negateInt32# :: Int32# -> Int32#
 negateInt32# = unaryInt32# negate
 
 compareInt32#
-  :: (BitVec32 -> BitVec32 -> Pantomime.Bool)
+  :: (BitVec32 -> BitVec32 -> SymFC.Bool)
   -> Int32#
   -> Int32#
   -> Int#
 compareInt32# f lhs rhs = do
-  let lhs' = Pantomime.fromInt32# lhs
-  let rhs' = Pantomime.fromInt32# rhs
+  let lhs' = SymFC.fromInt32# lhs
+  let rhs' = SymFC.fromInt32# rhs
   bool2I# $ f lhs' rhs'
 
 eqInt32# :: Int32# -> Int32# -> Int#
-eqInt32# = compareInt32# Pantomime.bveq
+eqInt32# = compareInt32# SymFC.bveq
 
 neInt32# :: Int32# -> Int32# -> Int#
-neInt32# = compareInt32# Pantomime.bvneq
+neInt32# = compareInt32# SymFC.bvneq
 
 geInt32# :: Int32# -> Int32# -> Int#
-geInt32# = compareInt32# $ flip Pantomime.bvsle
+geInt32# = compareInt32# $ flip SymFC.bvsle
 
 gtInt32# :: Int32# -> Int32# -> Int#
-gtInt32# = compareInt32# $ flip Pantomime.bvslt
+gtInt32# = compareInt32# $ flip SymFC.bvslt
 
 leInt32# :: Int32# -> Int32# -> Int#
-leInt32# = compareInt32# Pantomime.bvsle
+leInt32# = compareInt32# SymFC.bvsle
 
 ltInt32# :: Int32# -> Int32# -> Int#
-ltInt32# = compareInt32# Pantomime.bvslt
+ltInt32# = compareInt32# SymFC.bvslt
 
 int64ToInt# :: Int64# -> Int#
-int64ToInt# x = Pantomime.toInt# $ Pantomime.bvsext $ Pantomime.fromInt64# x
+int64ToInt# x = SymFC.toInt# $ SymFC.bvsext $ SymFC.fromInt64# x
 
 int64ToWord64# :: Int64# -> Word64#
-int64ToWord64# x = Pantomime.toWord64# $ Pantomime.fromInt64# x
+int64ToWord64# x = SymFC.toWord64# $ SymFC.fromInt64# x
 
 binaryInt64#
-  :: (BitVec64 -> BitVec64 -> BitVec64)
+  :: (BitVec 64 -> BitVec 64 -> BitVec 64)
   -> Int64#
   -> Int64#
   -> Int64#
 binaryInt64# f lhs rhs = do
-  let lhs' = Pantomime.fromInt64# lhs
-  let rhs' = Pantomime.fromInt64# rhs
-  Pantomime.toInt64# $ f lhs' rhs'
+  let lhs' = SymFC.fromInt64# lhs
+  let rhs' = SymFC.fromInt64# rhs
+  SymFC.toInt64# $ f lhs' rhs'
 
 plusInt64# :: Int64# -> Int64# -> Int64#
 plusInt64# = binaryInt64# (+)
@@ -750,58 +769,58 @@ timesInt64# :: Int64# -> Int64# -> Int64#
 timesInt64# = binaryInt64# (*)
 
 unaryInt64#
-  :: (BitVec64 -> BitVec64)
+  :: (BitVec 64 -> BitVec 64)
   -> Int64#
   -> Int64#
 unaryInt64# f x = do
-  let x' = Pantomime.fromInt64# x
-  Pantomime.toInt64# $ f x'
+  let x' = SymFC.fromInt64# x
+  SymFC.toInt64# $ f x'
 
 negateInt64# :: Int64# -> Int64#
 negateInt64# = unaryInt64# negate
 
 compareInt64#
-  :: (BitVec64 -> BitVec64 -> Pantomime.Bool)
+  :: (BitVec 64 -> BitVec 64 -> SymFC.Bool)
   -> Int64#
   -> Int64#
   -> Int#
 compareInt64# f lhs rhs = do
-  let lhs' = Pantomime.fromInt64# lhs
-  let rhs' = Pantomime.fromInt64# rhs
+  let lhs' = SymFC.fromInt64# lhs
+  let rhs' = SymFC.fromInt64# rhs
   bool2I# $ f lhs' rhs'
 
 eqInt64# :: Int64# -> Int64# -> Int#
-eqInt64# = compareInt64# Pantomime.bveq
+eqInt64# = compareInt64# SymFC.bveq
 
 neInt64# :: Int64# -> Int64# -> Int#
-neInt64# = compareInt64# Pantomime.bvneq
+neInt64# = compareInt64# SymFC.bvneq
 
 geInt64# :: Int64# -> Int64# -> Int#
-geInt64# = compareInt64# $ flip Pantomime.bvsle
+geInt64# = compareInt64# $ flip SymFC.bvsle
 
 gtInt64# :: Int64# -> Int64# -> Int#
-gtInt64# = compareInt64# $ flip Pantomime.bvslt
+gtInt64# = compareInt64# $ flip SymFC.bvslt
 
 leInt64# :: Int64# -> Int64# -> Int#
-leInt64# = compareInt64# Pantomime.bvsle
+leInt64# = compareInt64# SymFC.bvsle
 
 ltInt64# :: Int64# -> Int64# -> Int#
-ltInt64# = compareInt64# Pantomime.bvslt
+ltInt64# = compareInt64# SymFC.bvslt
 
 word2Int# :: Word# -> Int#
-word2Int# x = Pantomime.toInt# $ Pantomime.fromWord# x
+word2Int# x = SymFC.toInt# $ SymFC.fromWord# x
 
 wordToWord8# :: Word# -> Word8#
-wordToWord8# x = Pantomime.toWord8# $ Pantomime.bvselect @0 $ Pantomime.fromWord# x
+wordToWord8# x = SymFC.toWord8# $ SymFC.bvselect @0 $ SymFC.fromWord# x
 
 wordToWord16# :: Word# -> Word16#
-wordToWord16# x = Pantomime.toWord16# $ Pantomime.bvselect @0 $ Pantomime.fromWord# x
+wordToWord16# x = SymFC.toWord16# $ SymFC.bvselect @0 $ SymFC.fromWord# x
 
 wordToWord32# :: Word# -> Word32#
-wordToWord32# x = Pantomime.toWord32# $ Pantomime.bvselect @0 $ Pantomime.fromWord# x
+wordToWord32# x = SymFC.toWord32# $ SymFC.bvselect @0 $ SymFC.fromWord# x
 
 wordToWord64# :: Word# -> Word64#
-wordToWord64# x = Pantomime.toWord64# $ Pantomime.bvselect @0 $ Pantomime.fromWord# x
+wordToWord64# x = SymFC.toWord64# $ SymFC.bvselect @0 $ SymFC.fromWord# x
 
 binaryWord#
   :: (BitVecPW -> BitVecPW -> BitVecPW)
@@ -809,9 +828,9 @@ binaryWord#
   -> Word#
   -> Word#
 binaryWord# f lhs rhs = do
-  let lhs' = Pantomime.fromWord# lhs
-  let rhs' = Pantomime.fromWord# rhs
-  Pantomime.toWord# $ f lhs' rhs'
+  let lhs' = SymFC.fromWord# lhs
+  let rhs' = SymFC.fromWord# rhs
+  SymFC.toWord# $ f lhs' rhs'
 
 plusWord# :: Word# -> Word# -> Word#
 plusWord# = binaryWord# (+)
@@ -823,40 +842,40 @@ timesWord# :: Word# -> Word# -> Word#
 timesWord# = binaryWord# (*)
 
 binaryWordC#
-  :: (forall n. KnownNat n => Pantomime.BitVec n -> Pantomime.BitVec n -> Pantomime.BitVec n)
+  :: (forall n. KnownNat n => BitVec n -> BitVec n -> BitVec n)
   -> Word#
   -> Word#
   -> (# Word#, Int# #)
 binaryWordC# f lhs rhs = do
   let project' x
-        = Pantomime.bvzext @_ @(Pantomime.PlatformWordSize + 1)
-        $ Pantomime.fromWord# x
+        = SymFC.bvzext @_ @(PlatformWordSize + 1)
+        $ SymFC.fromWord# x
   let lhs' = project' lhs
   let rhs' = project' rhs
 
   let result = f lhs' rhs'
-  let add = Pantomime.bvselect @0 result
-  let carry = Pantomime.bvselect @Pantomime.PlatformWordSize @1 result
-  let carry' = Pantomime.bvzext carry
-  (# Pantomime.toWord# add, Pantomime.toInt# carry' #)
+  let add = SymFC.bvselect @0 result
+  let carry = SymFC.bvselect @PlatformWordSize @1 result
+  let carry' = SymFC.bvzext carry
+  (# SymFC.toWord# add, SymFC.toInt# carry' #)
 
 addWordC# :: Word# -> Word# -> (# Word#, Int# #)
-addWordC# = binaryWordC# Pantomime.bvadd
+addWordC# = binaryWordC# SymFC.bvadd
 
 subWordC# :: Word# -> Word# -> (# Word#, Int# #)
-subWordC# = binaryWordC# \lhs rhs -> Pantomime.bvadd lhs (Pantomime.bvneg rhs)
+subWordC# = binaryWordC# \lhs rhs -> SymFC.bvadd lhs (SymFC.bvneg rhs)
 
 and# :: Word# -> Word# -> Word#
-and# = binaryWord# Pantomime.bvand
+and# = binaryWord# SymFC.bvand
 
 or# :: Word# -> Word# -> Word#
-or# = binaryWord# Pantomime.bvor
+or# = binaryWord# SymFC.bvor
 
 xor# :: Word# -> Word# -> Word#
-xor# = binaryWord# Pantomime.bvxor
+xor# = binaryWord# SymFC.bvxor
 
 not# :: Word# -> Word#
-not# x = Pantomime.toWord# $ Pantomime.bvnot $ Pantomime.fromWord# x
+not# x = SymFC.toWord# $ SymFC.bvnot $ SymFC.fromWord# x
 
 -- FIXME: This behaviour is not great: in Haskell, it is UB when the idx is
 -- out of bounds but we now give it a specific semantic. Ideally, we would have
@@ -865,49 +884,49 @@ not# x = Pantomime.toWord# $ Pantomime.bvnot $ Pantomime.fromWord# x
 -- conjuring this at the moment, so I'll leave it as is for now!
 uncheckedShiftL# :: Word# -> Int# -> Word#
 uncheckedShiftL# val idx = do
-  let val' = Pantomime.fromWord# val
-  let idx' = Pantomime.fromInt# idx
-  Pantomime.toWord# $ Pantomime.bvshl val' idx'
+  let val' = SymFC.fromWord# val
+  let idx' = SymFC.fromInt# idx
+  SymFC.toWord# $ SymFC.bvshl val' idx'
 
 uncheckedShiftRL# :: Word# -> Int# -> Word#
 uncheckedShiftRL# val idx = do
-  let val' = Pantomime.fromWord# val
-  let idx' = Pantomime.fromInt# idx
-  Pantomime.toWord# $ Pantomime.bvlshr val' idx'
+  let val' = SymFC.fromWord# val
+  let idx' = SymFC.fromInt# idx
+  SymFC.toWord# $ SymFC.bvlshr val' idx'
 
 compareWord#
-  :: (BitVecPW -> BitVecPW -> Pantomime.Bool)
+  :: (BitVecPW -> BitVecPW -> SymFC.Bool)
   -> Word#
   -> Word#
   -> Int#
 compareWord# f lhs rhs = do
-  let lhs' = Pantomime.fromWord# lhs
-  let rhs' = Pantomime.fromWord# rhs
+  let lhs' = SymFC.fromWord# lhs
+  let rhs' = SymFC.fromWord# rhs
   bool2I# $ f lhs' rhs'
 
 eqWord# :: Word# -> Word# -> Int#
-eqWord# = compareWord# Pantomime.bveq
+eqWord# = compareWord# SymFC.bveq
 
 neWord# :: Word# -> Word# -> Int#
-neWord# = compareWord# Pantomime.bvneq
+neWord# = compareWord# SymFC.bvneq
 
 geWord# :: Word# -> Word# -> Int#
-geWord# = compareWord# $ flip Pantomime.bvule
+geWord# = compareWord# $ flip SymFC.bvule
 
 gtWord# :: Word# -> Word# -> Int#
-gtWord# = compareWord# $ flip Pantomime.bvult
+gtWord# = compareWord# $ flip SymFC.bvult
 
 leWord# :: Word# -> Word# -> Int#
-leWord# = compareWord# Pantomime.bvule
+leWord# = compareWord# SymFC.bvule
 
 ltWord# :: Word# -> Word# -> Int#
-ltWord# = compareWord# Pantomime.bvult
+ltWord# = compareWord# SymFC.bvult
 
 word8ToWord# :: Word8# -> Word#
-word8ToWord# x = Pantomime.toWord# $ Pantomime.bvzext $ Pantomime.fromWord8# x
+word8ToWord# x = SymFC.toWord# $ SymFC.bvzext $ SymFC.fromWord8# x
 
 word8ToInt8# :: Word8# -> Int8#
-word8ToInt8# x = Pantomime.toInt8# $ Pantomime.fromWord8# x
+word8ToInt8# x = SymFC.toInt8# $ SymFC.fromWord8# x
 
 binaryWord8#
   :: (BitVec8 -> BitVec8 -> BitVec8)
@@ -915,9 +934,9 @@ binaryWord8#
   -> Word8#
   -> Word8#
 binaryWord8# f lhs rhs = do
-  let lhs' = Pantomime.fromWord8# lhs
-  let rhs' = Pantomime.fromWord8# rhs
-  Pantomime.toWord8# $ f lhs' rhs'
+  let lhs' = SymFC.fromWord8# lhs
+  let rhs' = SymFC.fromWord8# rhs
+  SymFC.toWord8# $ f lhs' rhs'
 
 plusWord8# :: Word8# -> Word8# -> Word8#
 plusWord8# = binaryWord8# (+)
@@ -929,50 +948,50 @@ timesWord8# :: Word8# -> Word8# -> Word8#
 timesWord8# = binaryWord8# (*)
 
 andWord8# :: Word8# -> Word8# -> Word8#
-andWord8# = binaryWord8# Pantomime.bvand
+andWord8# = binaryWord8# SymFC.bvand
 
 orWord8# :: Word8# -> Word8# -> Word8#
-orWord8# = binaryWord8# Pantomime.bvor
+orWord8# = binaryWord8# SymFC.bvor
 
 xorWord8# :: Word8# -> Word8# -> Word8#
-xorWord8# = binaryWord8# Pantomime.bvxor
+xorWord8# = binaryWord8# SymFC.bvxor
 
 notWord8# :: Word8# -> Word8#
-notWord8# x = Pantomime.toWord8# $ Pantomime.bvnot $ Pantomime.fromWord8# x
+notWord8# x = SymFC.toWord8# $ SymFC.bvnot $ SymFC.fromWord8# x
 
 compareWord8#
-  :: (BitVec8 -> BitVec8 -> Pantomime.Bool)
+  :: (BitVec8 -> BitVec8 -> SymFC.Bool)
   -> Word8#
   -> Word8#
   -> Int#
 compareWord8# f lhs rhs = do
-  let lhs' = Pantomime.fromWord8# lhs
-  let rhs' = Pantomime.fromWord8# rhs
+  let lhs' = SymFC.fromWord8# lhs
+  let rhs' = SymFC.fromWord8# rhs
   bool2I# $ f lhs' rhs'
 
 eqWord8# :: Word8# -> Word8# -> Int#
-eqWord8# = compareWord8# Pantomime.bveq
+eqWord8# = compareWord8# SymFC.bveq
 
 neWord8# :: Word8# -> Word8# -> Int#
-neWord8# = compareWord8# Pantomime.bvneq
+neWord8# = compareWord8# SymFC.bvneq
 
 geWord8# :: Word8# -> Word8# -> Int#
-geWord8# = compareWord8# $ flip Pantomime.bvule
+geWord8# = compareWord8# $ flip SymFC.bvule
 
 gtWord8# :: Word8# -> Word8# -> Int#
-gtWord8# = compareWord8# $ flip Pantomime.bvult
+gtWord8# = compareWord8# $ flip SymFC.bvult
 
 leWord8# :: Word8# -> Word8# -> Int#
-leWord8# = compareWord8# Pantomime.bvule
+leWord8# = compareWord8# SymFC.bvule
 
 ltWord8# :: Word8# -> Word8# -> Int#
-ltWord8# = compareWord8# Pantomime.bvult
+ltWord8# = compareWord8# SymFC.bvult
 
 word16ToWord# :: Word16# -> Word#
-word16ToWord# x = Pantomime.toWord# $ Pantomime.bvzext $ Pantomime.fromWord16# x
+word16ToWord# x = SymFC.toWord# $ SymFC.bvzext $ SymFC.fromWord16# x
 
 word16ToInt16# :: Word16# -> Int16#
-word16ToInt16# x = Pantomime.toInt16# $ Pantomime.fromWord16# x
+word16ToInt16# x = SymFC.toInt16# $ SymFC.fromWord16# x
 
 binaryWord16#
   :: (BitVec16 -> BitVec16 -> BitVec16)
@@ -980,9 +999,9 @@ binaryWord16#
   -> Word16#
   -> Word16#
 binaryWord16# f lhs rhs = do
-  let lhs' = Pantomime.fromWord16# lhs
-  let rhs' = Pantomime.fromWord16# rhs
-  Pantomime.toWord16# $ f lhs' rhs'
+  let lhs' = SymFC.fromWord16# lhs
+  let rhs' = SymFC.fromWord16# rhs
+  SymFC.toWord16# $ f lhs' rhs'
 
 plusWord16# :: Word16# -> Word16# -> Word16#
 plusWord16# = binaryWord16# (+)
@@ -994,50 +1013,50 @@ timesWord16# :: Word16# -> Word16# -> Word16#
 timesWord16# = binaryWord16# (*)
 
 andWord16# :: Word16# -> Word16# -> Word16#
-andWord16# = binaryWord16# Pantomime.bvand
+andWord16# = binaryWord16# SymFC.bvand
 
 orWord16# :: Word16# -> Word16# -> Word16#
-orWord16# = binaryWord16# Pantomime.bvor
+orWord16# = binaryWord16# SymFC.bvor
 
 xorWord16# :: Word16# -> Word16# -> Word16#
-xorWord16# = binaryWord16# Pantomime.bvxor
+xorWord16# = binaryWord16# SymFC.bvxor
 
 notWord16# :: Word16# -> Word16#
-notWord16# x = Pantomime.toWord16# $ Pantomime.bvnot $ Pantomime.fromWord16# x
+notWord16# x = SymFC.toWord16# $ SymFC.bvnot $ SymFC.fromWord16# x
 
 compareWord16#
-  :: (BitVec16 -> BitVec16 -> Pantomime.Bool)
+  :: (BitVec16 -> BitVec16 -> SymFC.Bool)
   -> Word16#
   -> Word16#
   -> Int#
 compareWord16# f lhs rhs = do
-  let lhs' = Pantomime.fromWord16# lhs
-  let rhs' = Pantomime.fromWord16# rhs
+  let lhs' = SymFC.fromWord16# lhs
+  let rhs' = SymFC.fromWord16# rhs
   bool2I# $ f lhs' rhs'
 
 eqWord16# :: Word16# -> Word16# -> Int#
-eqWord16# = compareWord16# Pantomime.bveq
+eqWord16# = compareWord16# SymFC.bveq
 
 neWord16# :: Word16# -> Word16# -> Int#
-neWord16# = compareWord16# Pantomime.bvneq
+neWord16# = compareWord16# SymFC.bvneq
 
 geWord16# :: Word16# -> Word16# -> Int#
-geWord16# = compareWord16# $ flip Pantomime.bvule
+geWord16# = compareWord16# $ flip SymFC.bvule
 
 gtWord16# :: Word16# -> Word16# -> Int#
-gtWord16# = compareWord16# $ flip Pantomime.bvult
+gtWord16# = compareWord16# $ flip SymFC.bvult
 
 leWord16# :: Word16# -> Word16# -> Int#
-leWord16# = compareWord16# Pantomime.bvule
+leWord16# = compareWord16# SymFC.bvule
 
 ltWord16# :: Word16# -> Word16# -> Int#
-ltWord16# = compareWord16# Pantomime.bvult
+ltWord16# = compareWord16# SymFC.bvult
 
 word32ToWord# :: Word32# -> Word#
-word32ToWord# x = Pantomime.toWord# $ Pantomime.bvzext $ Pantomime.fromWord32# x
+word32ToWord# x = SymFC.toWord# $ SymFC.bvzext $ SymFC.fromWord32# x
 
 word32ToInt32# :: Word32# -> Int32#
-word32ToInt32# x = Pantomime.toInt32# $ Pantomime.fromWord32# x
+word32ToInt32# x = SymFC.toInt32# $ SymFC.fromWord32# x
 
 binaryWord32#
   :: (BitVec32 -> BitVec32 -> BitVec32)
@@ -1045,9 +1064,9 @@ binaryWord32#
   -> Word32#
   -> Word32#
 binaryWord32# f lhs rhs = do
-  let lhs' = Pantomime.fromWord32# lhs
-  let rhs' = Pantomime.fromWord32# rhs
-  Pantomime.toWord32# $ f lhs' rhs'
+  let lhs' = SymFC.fromWord32# lhs
+  let rhs' = SymFC.fromWord32# rhs
+  SymFC.toWord32# $ f lhs' rhs'
 
 plusWord32# :: Word32# -> Word32# -> Word32#
 plusWord32# = binaryWord32# (+)
@@ -1059,60 +1078,60 @@ timesWord32# :: Word32# -> Word32# -> Word32#
 timesWord32# = binaryWord32# (*)
 
 andWord32# :: Word32# -> Word32# -> Word32#
-andWord32# = binaryWord32# Pantomime.bvand
+andWord32# = binaryWord32# SymFC.bvand
 
 orWord32# :: Word32# -> Word32# -> Word32#
-orWord32# = binaryWord32# Pantomime.bvor
+orWord32# = binaryWord32# SymFC.bvor
 
 xorWord32# :: Word32# -> Word32# -> Word32#
-xorWord32# = binaryWord32# Pantomime.bvxor
+xorWord32# = binaryWord32# SymFC.bvxor
 
 notWord32# :: Word32# -> Word32#
-notWord32# x = Pantomime.toWord32# $ Pantomime.bvnot $ Pantomime.fromWord32# x
+notWord32# x = SymFC.toWord32# $ SymFC.bvnot $ SymFC.fromWord32# x
 
 compareWord32#
-  :: (BitVec32 -> BitVec32 -> Pantomime.Bool)
+  :: (BitVec32 -> BitVec32 -> SymFC.Bool)
   -> Word32#
   -> Word32#
   -> Int#
 compareWord32# f lhs rhs = do
-  let lhs' = Pantomime.fromWord32# lhs
-  let rhs' = Pantomime.fromWord32# rhs
+  let lhs' = SymFC.fromWord32# lhs
+  let rhs' = SymFC.fromWord32# rhs
   bool2I# $ f lhs' rhs'
 
 eqWord32# :: Word32# -> Word32# -> Int#
-eqWord32# = compareWord32# Pantomime.bveq
+eqWord32# = compareWord32# SymFC.bveq
 
 neWord32# :: Word32# -> Word32# -> Int#
-neWord32# = compareWord32# Pantomime.bvneq
+neWord32# = compareWord32# SymFC.bvneq
 
 geWord32# :: Word32# -> Word32# -> Int#
-geWord32# = compareWord32# $ flip Pantomime.bvule
+geWord32# = compareWord32# $ flip SymFC.bvule
 
 gtWord32# :: Word32# -> Word32# -> Int#
-gtWord32# = compareWord32# $ flip Pantomime.bvult
+gtWord32# = compareWord32# $ flip SymFC.bvult
 
 leWord32# :: Word32# -> Word32# -> Int#
-leWord32# = compareWord32# Pantomime.bvule
+leWord32# = compareWord32# SymFC.bvule
 
 ltWord32# :: Word32# -> Word32# -> Int#
-ltWord32# = compareWord32# Pantomime.bvult
+ltWord32# = compareWord32# SymFC.bvult
 
 word64ToWord# :: Word64# -> Word#
-word64ToWord# x = Pantomime.toWord# $ Pantomime.bvzext $ Pantomime.fromWord64# x
+word64ToWord# x = SymFC.toWord# $ SymFC.bvzext $ SymFC.fromWord64# x
 
 word64ToInt64# :: Word64# -> Int64#
-word64ToInt64# x = Pantomime.toInt64# $ Pantomime.fromWord64# x
+word64ToInt64# x = SymFC.toInt64# $ SymFC.fromWord64# x
 
 binaryWord64#
-  :: (BitVec64 -> BitVec64 -> BitVec64)
+  :: (BitVec 64 -> BitVec 64 -> BitVec 64)
   -> Word64#
   -> Word64#
   -> Word64#
 binaryWord64# f lhs rhs = do
-  let lhs' = Pantomime.fromWord64# lhs
-  let rhs' = Pantomime.fromWord64# rhs
-  Pantomime.toWord64# $ f lhs' rhs'
+  let lhs' = SymFC.fromWord64# lhs
+  let rhs' = SymFC.fromWord64# rhs
+  SymFC.toWord64# $ f lhs' rhs'
 
 plusWord64# :: Word64# -> Word64# -> Word64#
 plusWord64# = binaryWord64# (+)
@@ -1124,54 +1143,54 @@ timesWord64# :: Word64# -> Word64# -> Word64#
 timesWord64# = binaryWord64# (*)
 
 and64# :: Word64# -> Word64# -> Word64#
-and64# = binaryWord64# Pantomime.bvand
+and64# = binaryWord64# SymFC.bvand
 
 or64# :: Word64# -> Word64# -> Word64#
-or64# = binaryWord64# Pantomime.bvor
+or64# = binaryWord64# SymFC.bvor
 
 xor64# :: Word64# -> Word64# -> Word64#
-xor64# = binaryWord64# Pantomime.bvxor
+xor64# = binaryWord64# SymFC.bvxor
 
 not64# :: Word64# -> Word64#
-not64# x = Pantomime.toWord64# $ Pantomime.bvnot $ Pantomime.fromWord64# x
+not64# x = SymFC.toWord64# $ SymFC.bvnot $ SymFC.fromWord64# x
 
 compareWord64#
-  :: (BitVec64 -> BitVec64 -> Pantomime.Bool)
+  :: (BitVec 64 -> BitVec 64 -> SymFC.Bool)
   -> Word64#
   -> Word64#
   -> Int#
 compareWord64# f lhs rhs = do
-  let lhs' = Pantomime.fromWord64# lhs
-  let rhs' = Pantomime.fromWord64# rhs
+  let lhs' = SymFC.fromWord64# lhs
+  let rhs' = SymFC.fromWord64# rhs
   bool2I# $ f lhs' rhs'
 
 eqWord64# :: Word64# -> Word64# -> Int#
-eqWord64# = compareWord64# Pantomime.bveq
+eqWord64# = compareWord64# SymFC.bveq
 
 neWord64# :: Word64# -> Word64# -> Int#
-neWord64# = compareWord64# Pantomime.bvneq
+neWord64# = compareWord64# SymFC.bvneq
 
 geWord64# :: Word64# -> Word64# -> Int#
-geWord64# = compareWord64# $ flip Pantomime.bvule
+geWord64# = compareWord64# $ flip SymFC.bvule
 
 gtWord64# :: Word64# -> Word64# -> Int#
-gtWord64# = compareWord64# $ flip Pantomime.bvult
+gtWord64# = compareWord64# $ flip SymFC.bvult
 
 leWord64# :: Word64# -> Word64# -> Int#
-leWord64# = compareWord64# Pantomime.bvule
+leWord64# = compareWord64# SymFC.bvule
 
 ltWord64# :: Word64# -> Word64# -> Int#
-ltWord64# = compareWord64# Pantomime.bvult
+ltWord64# = compareWord64# SymFC.bvult
 
-fromInteger :: Integer -> Pantomime.Integer
+fromInteger :: Integer -> SymFC.Integer
 fromInteger = \case
-  IS x -> Pantomime.bvs2i @Pantomime.PlatformWordSize $ Pantomime.fromInt# x
+  IS x -> SymFC.bvs2i @PlatformWordSize $ SymFC.fromInt# x
   IP _x -> undefined
   IN _x -> undefined
 
-toInteger :: Pantomime.Integer -> Integer
+toInteger :: SymFC.Integer -> Integer
 toInteger x = do
-  let toI (I# i) = Pantomime.bvs2i $ Pantomime.fromInt# i
+  let toI (I# i) = SymFC.bvs2i $ SymFC.fromInt# i
   let minI = toI minBound
   let maxI = toI maxBound
   if
@@ -1181,8 +1200,8 @@ toInteger x = do
     | x < minI -> undefined
     | maxI < x -> undefined
     | otherwise -> do
-      let x' = Pantomime.i2bv @Pantomime.PlatformWordSize x
-      IS $ Pantomime.toInt# x'
+      let x' = SymFC.i2bv @PlatformWordSize x
+      IS $ SymFC.toInt# x'
 
 -- TODO: The below definitions exists solely because the unfolding doesn't
 -- exist. There should be a way around this...
@@ -1199,6 +1218,13 @@ integerToNatural = \case
   IS x -> GHC.naturalFromWord# (GHC.wordFromAbsInt# x)
   IP x -> GHC.naturalFromBigNat# x
   IN x -> GHC.naturalFromBigNat# x
+
+integerToNaturalThrow :: Integer -> Natural
+integerToNaturalThrow (IS x)
+  | GHC.isTrue# (x <# 0#) = GHC.raiseUnderflow
+  | True                  = GHC.naturalFromWord# (int2Word# x)
+integerToNaturalThrow (IP x) = GHC.naturalFromBigNat# x
+integerToNaturalThrow (IN _) = GHC.raiseUnderflow
 
 integerFromWord# :: Word# -> Integer
 integerFromWord# w = if
@@ -1293,8 +1319,12 @@ throw :: forall rep (a :: TYPE rep) e. e -> a
 throw = GHC.raise# ()
 
 -- FIXME: This is not actually the implementation for 'patError'.
-patError' :: forall q (a :: TYPE q). Addr# -> a
-patError' _ = GHC.raise# ()
+patError :: forall q (a :: TYPE q). Addr# -> a
+patError _ = GHC.raise# ()
+
+-- FIXME: This is not actually the implementation for 'absentError'.
+absentError :: Addr# -> a
+absentError _ = GHC.raise# ()
 
 withSomeSNat
   :: forall rep (r :: TYPE rep)
@@ -1314,3 +1344,82 @@ zip :: [a] -> [b] -> [(a, b)]
 zip = \cases
   (x : xs) (y : ys) -> (x, y) : zip xs ys
   _ _ -> []
+
+runRW# :: forall r (o :: TYPE r). (State# RealWorld -> o) -> o 
+runRW# m = m GHC.realWorld#
+
+instance Symbolic Int where
+  symbolic = do
+    bv <- symbolic
+    pure $ I# (SymFC.toInt# bv)
+
+instance Symbolic Int8 where
+  symbolic = do
+    bv <- symbolic
+    pure $ I8# (SymFC.toInt8# bv)
+
+instance Symbolic Int16 where
+  symbolic = do
+    bv <- symbolic
+    pure $ I16# (SymFC.toInt16# bv)
+
+instance Symbolic Int32 where
+  symbolic = do
+    bv <- symbolic
+    pure $ I32# (SymFC.toInt32# bv)
+
+instance Symbolic Int64 where
+  symbolic = do
+    bv <- symbolic
+    pure $ I64# (SymFC.toInt64# bv)
+
+instance Symbolic Word where
+  symbolic = do
+    bv <- symbolic
+    pure $ W# (SymFC.toWord# bv)
+
+instance Symbolic Word8 where
+  symbolic = do
+    bv <- symbolic
+    pure $ W8# (SymFC.toWord8# bv)
+
+instance Symbolic Word16 where
+  symbolic = do
+    bv <- symbolic
+    pure $ W16# (SymFC.toWord16# bv)
+
+instance Symbolic Word32 where
+  symbolic = do
+    bv <- symbolic
+    pure $ W32# (SymFC.toWord32# bv)
+
+instance Symbolic Word64 where
+  symbolic = do
+    bv <- symbolic
+    pure $ W64# (SymFC.toWord64# bv)
+
+instance Symbolic Integer where
+  symbolic = do
+    guard <- symbolic
+    bv <- symbolic
+    pure $ SymFC.ite guard (IS $ SymFC.toInt# bv) undefined
+
+instance Symbolic ()
+
+instance Symbolic Void
+
+instance Symbolic Bool
+
+instance Symbolic a => Symbolic (Identity a)
+
+instance Symbolic a => Symbolic [a]
+
+instance Symbolic a => Symbolic (Maybe a)
+
+instance (Symbolic a, Symbolic b) => Symbolic (Either a b)
+
+instance (Symbolic a, Symbolic b) => Symbolic (a, b)
+
+instance (Symbolic a, Symbolic b, Symbolic c) => Symbolic (a, b, c)
+
+instance (Symbolic a, Symbolic b, Symbolic c, Symbolic d) => Symbolic (a, b, c, d)

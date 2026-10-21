@@ -1,10 +1,10 @@
-name:                pantomime-base
+name:                sym-fc-base
 version:             0.1.0.0
-github:              "githubuser/pantomime-base"
+github:              "PLSec-VU/sym-fc-base"
 license:             BSD-3-Clause
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2026 Author name here"
+author:              "Robin Webbers"
+maintainer:          "robin_webbers_1@hotmail.com"
+copyright:           "2026 Robin Webbers"
 
 extra-source-files:
 - README.md
@@ -17,7 +17,7 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/githubuser/pantomime-base#readme>
+description:         Please see the README on GitHub at <https://github.com/githubuser/sym-fc-base#readme>
 
 default-extensions:
 - AllowAmbiguousTypes
@@ -51,7 +51,7 @@ dependencies:
 - constraints
 - ghc-bignum
 - ghc-prim
-- pantomime
+- sym-fc
 
 ghc-options:
 - -Wall

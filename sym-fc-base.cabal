@@ -1,17 +1,17 @@
 cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.39.1.
+-- This file has been generated from package.yaml by hpack version 0.39.6.
 --
 -- see: https://github.com/sol/hpack
 
-name:           pantomime-base
+name:           sym-fc-base
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/pantomime-base#readme>
-homepage:       https://github.com/githubuser/pantomime-base#readme
-bug-reports:    https://github.com/githubuser/pantomime-base/issues
-author:         Author name here
-maintainer:     example@example.com
-copyright:      2026 Author name here
+description:    Please see the README on GitHub at <https://github.com/githubuser/sym-fc-base#readme>
+homepage:       https://github.com/PLSec-VU/sym-fc-base#readme
+bug-reports:    https://github.com/PLSec-VU/sym-fc-base/issues
+author:         Robin Webbers
+maintainer:     robin_webbers_1@hotmail.com
+copyright:      2026 Robin Webbers
 license:        BSD-3-Clause
 license-file:   LICENSE
 build-type:     Simple
@@ -21,15 +21,15 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/githubuser/pantomime-base
+  location: https://github.com/PLSec-VU/sym-fc-base
 
 library
   exposed-modules:
-      Pantomime.Base
+      SymFC.Base
   other-modules:
-      Paths_pantomime_base
+      Paths_sym_fc_base
   autogen-modules:
-      Paths_pantomime_base
+      Paths_sym_fc_base
   hs-source-dirs:
       src
   default-extensions:
@@ -64,5 +64,5 @@ library
     , constraints
     , ghc-bignum
     , ghc-prim
-    , pantomime
+    , sym-fc
   default-language: Haskell2010
