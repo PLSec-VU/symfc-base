@@ -5,27 +5,27 @@
 
 packages:
 - completed:
-    commit: a282b167f1caf5773caf24a0895ad06744eb1c15
-    git: git@github.com:PLSec-VU/symfc.git
     name: sym-fc
     pantry-tree:
       sha256: 4555793e6b4fcdd95f68e9024d103c2e26630e63a4b13205a00a4cd8c75222d3
       size: 2404
+    sha256: 5fba29d73f74e794d2b91021aef1721ad82fbbcdd7b502ec3f58f60e272c105a
+    size: 76933
+    url: https://github.com/PLSec-VU/symfc/archive/a282b167f1caf5773caf24a0895ad06744eb1c15.tar.gz
     version: 0.1.0.0
   original:
-    commit: a282b167f1caf5773caf24a0895ad06744eb1c15
-    git: git@github.com:PLSec-VU/symfc.git
+    url: https://github.com/PLSec-VU/symfc/archive/a282b167f1caf5773caf24a0895ad06744eb1c15.tar.gz
 - completed:
-    commit: ae4d837886efb2e7838f89271f343d6fa8130388
-    git: git@github.com:RobinWebbers/grisette.git
     name: grisette
     pantry-tree:
       sha256: ac978bcc6a35ee65677dbe41373c2799759457dedee85c6888a2cb7b362a2068
       size: 31883
+    sha256: 46de15734b258feee28ccc47c60a36a12fd3e975077615e8c31291b9d8ca79ef
+    size: 555460
+    url: https://github.com/RobinWebbers/grisette/archive/ae4d837886efb2e7838f89271f343d6fa8130388.tar.gz
     version: 0.13.0.1
   original:
-    commit: ae4d837886efb2e7838f89271f343d6fa8130388
-    git: git@github.com:RobinWebbers/grisette.git
+    url: https://github.com/RobinWebbers/grisette/archive/ae4d837886efb2e7838f89271f343d6fa8130388.tar.gz
 - completed:
     hackage: sbv-13.6@sha256:65099c81504a2e85a49cc94a4f8bacad12c423b9171cf2ef3b6686a6a71d99ec,27240
     pantry-tree:
