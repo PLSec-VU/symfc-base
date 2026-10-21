@@ -1,4 +1,4 @@
-# Changelog for `pantomime-base`
+# Changelog for `sym-fc-base`
 
 All notable changes to this project will be documented in this file.
 
